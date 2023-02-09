@@ -1,0 +1,679 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(survminer)
+library(survival)
+library(ggsurvfit)
+
+```
+
+
+#Visualize difference in survival between classes
+```{r}
+survival_OS$tte_fu <- as.numeric(survival_OS$tte_fu)
+survival_OS$stat_code_os <- as.numeric(survival_OS$stat_code_os)
+
+survival_PFS$tte_fu <- as.numeric(survival_PFS$tte_fu)
+survival_PFS$stat_code_pfs <- as.numeric(survival_PFS$stat_code)
+
+Surv(survival_OS$tte_fu, survival_OS$stat_code_os)
+
+survdiff(Surv(tte_fu, stat_code_os) ~tp53, data=survival_OS)
+
+#Whole cohort
+survfit2(Surv(tte_fu, stat_code_os) ~1, data=survival_OS) %>% 
+  ggsurvfit()+
+  labs(
+    x="Days",
+    y="Overall Survival Probability"
+  ) + 
+  add_confidence_interval()+
+  add_risktable()
+```
+#By predicted class
+
+```{r}
+
+survdiff(Surv(tte_fu, stat_code_os) ~status, data=survival_OS)
+```
+
+#Overall Survival KM Plots
+
+```{r}
+#By tp53 mutational status
+
+survival_OS$tp53[survival_OS$tp53=="yes"] <- "TP53 mut"
+survival_OS$tp53[survival_OS$tp53=="no"] <- "TP53 wt"
+
+survdiff(Surv(tte_fu, stat_code_os) ~tp53, data=survival_OS)
+```
+
+
+```{r}
+p <- survfit2(Surv(tte_fu, stat_code_os) ~tp53, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "TP53 mutational status", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+               
+
+p
+```
+
+
+```{r}
+#By ECOG group
+
+survdiff(Surv(tte_fu, stat_code_os) ~ecog, data=survival_OS)
+```
+
+
+```{r}
+e <- survfit2(Surv(tte_fu, stat_code_os) ~ecog, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "ECOG Groups", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+e
+
+```
+
+
+```{r}
+#By morphology
+
+survival_OS$morph[survival_OS$morph=="leukemic"] <- "classic"
+survival_OS$morph[survival_OS$morph=="aggressive_features_or_morphology_other"] <- "other"
+survival_OS$morph[survival_OS$morph=="blastoid_and_pleomorphic"] <- "aggressive histology"
+survival_OS$morph[survival_OS$morph=="blastoid"] <- "aggressive histology"
+survival_OS$morph[survival_OS$morph=="pleomorphic"] <- "aggressive histology"
+
+survdiff(Surv(tte_fu, stat_code_os) ~morph, data=survival_OS)
+
+```
+```{r}
+m <- survfit2(Surv(tte_fu, stat_code_os) ~morph, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Morphology", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+m
+```
+```{r}
+#By GI Involvement
+
+survdiff(Surv(tte_fu, stat_code_os) ~gi_involve, data=survival_OS)
+```
+
+```{r}
+gi <- survfit2(Surv(tte_fu, stat_code_os) ~gi_involve, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "GI Involvement", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+gi
+```
+```{r}
+#By smoking status
+survdiff(Surv(tte_fu, stat_code_os) ~smoke, data=survival_OS)
+
+
+```
+```{r}
+smoke <- survfit2(Surv(tte_fu, stat_code_os) ~smoke, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Smoking Status", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+smoke
+```
+```{r}
+#Make categorical variables for numeric features.
+
+survival_OS$ki_67_cat[survival_OS$ki_67 > 20]<-"high"
+survival_OS$ki_67_cat[survival_OS$ki_67 < 20]<-"low"
+
+survival_OS$ldh_cat[survival_OS$ldh >= 255]<-"high"
+survival_OS$ldh_cat[survival_OS$ldh < 255]<-"normal"
+
+survival_OS$wbc_cat[survival_OS$wbc > 10700]<-"high"
+survival_OS$wbc_cat[survival_OS$wbc > 3700 & survival_OS$wbc < 10700  ] <-"normal"
+survival_OS$wbc_cat[survival_OS$wbc < 3700]<-"low"
+
+survival_OS$mutation_cat[survival_OS$total_genes_mutated > 5]<-"more than 5"
+survival_OS$mutation_cat[survival_OS$total_genes_mutated <= 5]<-"5 or less"
+
+survival_OS$b2m_cat[survival_OS$b2m > 1.8]<-"high"
+survival_OS$b2m_cat[survival_OS$b2m <= 1.8]<-"normal"
+
+survival_OS$bm_cat[survival_OS$bm > 5]<-"involved"
+survival_OS$bm_cat[survival_OS$bm <= 5]<-"minimal or none"
+
+survival_OS$platelet_cat[survival_OS$platelets > 150]<-"normal"
+survival_OS$platelet_cat[survival_OS$platelets <= 150]<-"low"
+
+survival_OS$bmi_cat[survival_OS$bmi > 24.9]<-"overweight or obese"
+survival_OS$bmi_cat[survival_OS$bmi <= 24.9]<-"normal or underweight"
+
+survival_OS$age_cat[survival_OS$age_dx_years > 63]<-"over 63 years"
+survival_OS$age_cat[survival_OS$age_dx_years <= 63]<-"under 63 years"
+
+```
+
+
+```{r}
+#By ki-67
+survdiff(Surv(tte_fu, stat_code_os) ~ki_67_cat, data=survival_OS)
+
+```
+```{r}
+ki_67 <- survfit2(Surv(tte_fu, stat_code_os) ~ki_67_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Ki 67 Category", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+ki_67
+```
+
+```{r}
+#By ldh category
+survdiff(Surv(tte_fu, stat_code_os) ~ldh_cat, data=survival_OS)
+```
+```{r}
+ldh <- survfit2(Surv(tte_fu, stat_code_os) ~ldh_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "LDH category", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+ldh
+```
+```{r}
+#By B2M category
+survdiff(formula = Surv(tte_fu, stat_code_os) ~ b2m_cat, data = survival_OS)
+```
+
+
+```{r}
+b2m <- survfit2(Surv(tte_fu, stat_code_os) ~b2m_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=3000, caption="Log-rank {p.value}", size=4)+
+                labs(title = "Beta 2 Microglobulin Groups", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+b2m
+
+```
+```{r}
+
+survdiff(formula = Surv(tte_fu, stat_code_os) ~ age_cat, data = survival_OS)
+
+age <- survfit2(Surv(tte_fu, stat_code_os) ~age_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=3000, caption="Log-rank {p.value}", size=4)+
+                labs(title = "Age at Dx", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+age
+```
+
+```{r}
+survdiff(formula = Surv(tte_fu, stat_code_os) ~ bmi_cat, data = survival_OS)
+
+bmi <- survfit2(Surv(tte_fu, stat_code_os) ~bmi_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=3000, caption="Log-rank {p.value}", size=4)+
+                labs(title = "BMI categories", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+bmi
+```
+
+```{r}
+#By WBC category
+survdiff(Surv(tte_fu, stat_code_os) ~wbc_cat, data=survival_OS)
+```
+
+```{r}
+wbc <- survfit2(Surv(tte_fu, stat_code_os) ~wbc_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "WBC Categories", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+wbc
+```
+
+
+```{r}
+msurvdiff(Surv(tte_fu, stat_code_os) ~mutation_cat, data=survival_OS)
+
+
+mutation <- survfit2(Surv(tte_fu, stat_code_os) ~mutation_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Mutation Categories", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+mutation
+
+```
+```{r}
+#By CARD11 mutational status
+survdiff(Surv(tte_fu, stat_code_os) ~card11, data=survival_OS)
+
+#By CARD11 mutational status
+survdiff(Surv(tte_fu, stat_code) ~card11, data=survival_PFS)
+
+```
+```{r}
+#By Bone Marrow involvement
+survdiff(Surv(tte_fu, stat_code_os) ~bm_cat, data=survival_OS)
+
+bm <- survfit2(Surv(tte_fu, stat_code_os) ~bm_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Bone Marrow Involvement", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+bm
+
+
+```
+
+```{r}
+survdiff(Surv(tte_fu, stat_code_os) ~platelet_cat, data=survival_OS)
+
+platelet <- survfit2(Surv(tte_fu, stat_code_os) ~platelet_cat, data=survival_OS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Platelet Categories", y="Probability (OS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+platelet
+```
+```{r}
+
+
+```
+
+#For PFS
+```{r}
+#By tp53 mutational status
+
+survival_PFS$tp53[survival_PFS$tp53=="yes"] <- "TP53 mut"
+survival_PFS$tp53[survival_PFS$tp53=="no"] <- "TP53 wt"
+
+survdiff(Surv(tte_fu, stat_code) ~tp53, data=survival_PFS)
+
+```
+
+```{r}
+p <- survfit2(Surv(tte_fu, stat_code) ~tp53, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2500, caption="Log-rank {p.value}", size=3)+
+                labs(title = "TP53 mutational status", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+               
+
+p
+```
+
+```{r}
+#By ECOG group
+
+survdiff(Surv(tte_fu, stat_code) ~ecog, data=survival_PFS)
+```
+
+```{r}
+e <- survfit2(Surv(tte_fu, stat_code) ~ecog, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2500, caption="Log-rank {p.value}", size=3)+
+                labs(title = "ECOG Group", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+               
+
+e
+```
+```{r}
+#By morphology
+
+survival_PFS$morph[survival_PFS$morph=="leukemic"] <- "classic"
+survival_PFS$morph[survival_PFS$morph=="aggressive_features_or_morphology_other"] <- "other"
+survival_PFS$morph[survival_PFS$morph=="blastoid_and_pleomorphic"] <- "aggressive histology"
+survival_PFS$morph[survival_PFS$morph=="blastoid"] <- "aggressive histology"
+survival_PFS$morph[survival_PFS$morph=="pleomorphic"] <- "aggressive histology"
+
+survdiff(Surv(tte_fu, stat_code) ~morph, data=survival_PFS)
+```
+
+```{r}
+m <- survfit2(Surv(tte_fu, stat_code) ~morph, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2500, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Morphology", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+m
+```
+```{r}
+#By GI Involvement
+
+survdiff(Surv(tte_fu, stat_code) ~gi_involve, data=survival_PFS)
+```
+```{r}
+gi <- survfit2(Surv(tte_fu, stat_code) ~gi_involve, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "GI Involvement", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+gi
+```
+
+```{r}
+#By smoking status
+survdiff(Surv(tte_fu, stat_code) ~smoke, data=survival_PFS)
+```
+```{r}
+smoke <- survfit2(Surv(tte_fu, stat_code) ~smoke, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Smoking Status", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+smoke
+```
+```{r}
+#Make categorical variables for numeric features.
+
+survival_PFS$bmi_cat[survival_PFS$bmi > 24.9]<-"overweight or obese"
+survival_PFS$bmi_cat[survival_PFS$bmi <= 24.9]<-"normal or underweight"
+
+survival_PFS$ki_67_cat[survival_PFS$ki_67 > 20]<-"high"
+survival_PFS$ki_67_cat[survival_PFS$ki_67 < 20]<-"low"
+
+survival_PFS$ldh_cat[survival_PFS$ldh >= 255]<-"high"
+survival_PFS$ldh_cat[survival_PFS$ldh < 255]<-"normal"
+
+survival_PFS$wbc_cat[survival_PFS$wbc > 10700]<-"high"
+survival_PFS$wbc_cat[survival_PFS$wbc > 3700 & survival_PFS$wbc < 10700  ] <-"normal"
+survival_PFS$wbc_cat[survival_PFS$wbc < 3700]<-"low"
+
+survival_PFS$mutation_cat[survival_PFS$total_genes_mutated > 5]<-"more than 5"
+survival_PFS$mutation_cat[survival_PFS$total_genes_mutated <= 5]<-"5 or less"
+
+survival_PFS$b2m_cat[survival_PFS$b2m > 1.8]<-"high"
+survival_PFS$b2m_cat[survival_PFS$b2m <= 1.8]<-"normal"
+
+survival_PFS$bm_cat[survival_PFS$bm > 5]<-"involved"
+survival_PFS$bm_cat[survival_PFS$bm <= 5]<-"minimal or none"
+
+survival_PFS$platelet_cat[survival_PFS$platelets > 150]<-"normal"
+survival_PFS$platelet_cat[survival_PFS$platelets <= 150]<-"low"
+
+survival_PFS$age_cat[survival_PFS$age_dx_years > 63]<-"over 63 years"
+survival_PFS$age_cat[survival_PFS$age_dx_years <= 63]<-"under 63 years"
+```
+```{r}
+#By ki-67
+survdiff(Surv(tte_fu, stat_code) ~ki_67_cat, data=survival_PFS)
+```
+
+```{r}
+ki_67 <- survfit2(Surv(tte_fu, stat_code) ~ki_67_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Ki 67 Category", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+ki_67
+```
+```{r}
+#PFS by LDH category
+survdiff(Surv(tte_fu, stat_code) ~ldh_cat, data=survival_PFS)
+```
+```{r}
+ldh <- survfit2(Surv(tte_fu, stat_code) ~ldh_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "LDH category", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+ldh
+```
+```{r}
+#By B2M category
+survdiff(formula = Surv(tte_fu, stat_code) ~ b2m_cat, data = survival_PFS)
+```
+```{r}
+b2m <- survfit2(Surv(tte_fu, stat_code) ~b2m_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "B2M category", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+b2m
+```
+```{r}
+#By WBC category
+survdiff(Surv(tte_fu, stat_code) ~wbc_cat, data=survival_PFS)
+```
+
+```{r}
+survdiff(Surv(tte_fu, stat_code) ~age_cat, data=survival_PFS)
+
+age <- survfit2(Surv(tte_fu, stat_code) ~age_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Age at diagnosis", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+age
+```
+
+```{r}
+wbc <- survfit2(Surv(tte_fu, stat_code) ~wbc_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "WBC category", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+wbc
+```
+```{r}
+survdiff(Surv(tte_fu, stat_code) ~mutation_cat, data=survival_PFS)
+
+
+mutation <- survfit2(Surv(tte_fu, stat_code) ~mutation_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Mutation Categories", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+mutation
+```
+```{r}
+survdiff(Surv(tte_fu, stat_code) ~bm_cat, data=survival_PFS)
+
+bm <- survfit2(Surv(tte_fu, stat_code) ~bm_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Bone Marrow Involvement", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+bm
+```
+
+```{r}
+survdiff(Surv(tte_fu, stat_code) ~platelet_cat, data=survival_PFS)
+
+platelet <- survfit2(Surv(tte_fu, stat_code) ~platelet_cat, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Platelet Categories", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+platelet
+```
+```{r}
+smoke <- survfit2(Surv(tte_fu, stat_code) ~smoke, data=survival_PFS) %>% 
+                ggsurvfit(linewidth=1)+
+                add_quantile(y_value=0.6, color="gray50", linewidth=0.75)+
+                add_pvalue(location = "annotation", x=2700, caption="Log-rank {p.value}", size=3)+
+                labs(title = "Smoking Status", y="Probability (PFS)") +
+                add_confidence_interval()+
+                xlab("Follow-up time (days)")
+
+smoke
+```
+```{r}
+survdiff(Surv(tte_fu, stat_code) ~bmi_cat, data=survival_PFS)
+```
+
+
+```{r}
+#MIPI compare
+
+survival_OS <- survival_OS%>% mutate(ldh_uln = (ldh/255))
+
+survival_OS <- survival_OS%>% mutate(calc_MIPI = (0.03535 * age_dx_years)+(1.367 * log10(ldh_uln))+(0.9393 * log10(wbc)), na.rm=T)
+
+survival_OS <- survival_OS%>% mutate(biol_MIPI = ((0.03535 * age_dx_years)+(1.367 * log10(ldh_uln))+(0.9393 * log10(wbc)) + (0.02142 * ki_67)), na.rm=T)
+
+
+```
+
+```{r}
+MCL_cox[23] <- sapply(MCL_cox[23], as.factor)
+MCL_cox[25] <- sapply(MCL_cox[25], as.factor)
+
+#Remove "status" variable
+MCL_cox <- select(MCL_cox, -status)
+MCL_cox <- select(MCL_cox, -pt_id)
+MCL_cox <- select(MCL_cox, -nf1)
+
+MCL_cox <- select(MCL_cox, -vital_stat)
+```
+
+#Visualize continuous variables
+```{r}
+#Ki 67%
+MCL_cox %>% 
+  ggplot(aes(ki_67)) +
+  geom_histogram(bins=20)+
+  scale_x_continuous(limits=c(0,100))+
+  labs(y="number of patients", x="ki 67 %")
+```
+
+
+```{r}
+#White blood cell count (WBC)
+
+MCL_cox %>% 
+  ggplot(aes(wbc)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(500,5000))+
+  labs(y="number of patients", x="WBC")
+```
+```{r}
+MCL_cox %>% 
+  ggplot(aes(bm)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(0,100))+
+  labs(y="number of patients", x="Bone Marrow Infiltration %")
+```
+```{r}
+MCL_cox %>% 
+  ggplot(aes(ldh)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(50,500))+
+  labs(y="number of patients", x="LDH")
+```
+```{r}
+MCL_cox %>% 
+  ggplot(aes(b2m)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(0,10))+
+  labs(y="number of patients", x="Beta 2 Microglobulin")
+```
+```{r}
+MCL_cox %>% 
+  ggplot(aes(wbc)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(500,5000))+
+  labs(y="number of patients", x="WBC")
+```
+
+```{r}
+MCL_cox %>% 
+  ggplot(aes(platelets)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(100,1000))+
+  labs(y="number of patients", x="Platelets")
+```
+```{r}
+MCL_cox %>% 
+  ggplot(aes(alcohol)) +
+  geom_histogram(bins=30)+
+  scale_x_continuous(limits=c(0,100)) +
+  scale_y_discrete(limits=c(0, 200))+
+  labs(y="number of patients", x="Drinks per week")
+```
+
