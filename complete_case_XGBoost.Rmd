@@ -1,0 +1,256 @@
+---
+title: "XGBoost - complete cytogenetic case analysis"
+output: html_notebook
+---
+
+```{r}
+library(tidymodels)
+library(doParallel)
+
+set.seed(122)
+mcl_split <- initial_split(MCL, strata=status)
+mcl_train <- training(mcl_split)
+mcl_test <- testing(mcl_split)
+
+mcl_folds<-vfold_cv(mcl_train, strata=status)
+
+```
+
+
+
+```{r}
+mcl_recipe<-recipe(status ~.,data=mcl_train) %>% 
+  update_role(pt_id, new_role = "id variable") %>% 
+  step_other(all_nominal_predictors(),threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_nzv(all_predictors()) 
+
+   
+
+
+
+mcl_prep <- prep(mcl_recipe)
+mcl_data_preprocessed <- juice(mcl_prep)
+juice(mcl_prep)
+```
+
+#Tune hyperparameters
+
+```{r}
+xgb_spec <- boost_tree(
+  trees= 2000,
+  tree_depth = tune(),
+  min_n = tune(),
+  loss_reduction = tune(),
+  sample_size = tune(),
+  mtry= tune(),
+  learn_rate = tune()) %>% 
+  set_engine("xgboost", ) %>% 
+  set_mode("classification")
+
+xgb_spec
+```
+
+#Use grid based / space fitting to cover hyperparameter space
+
+```{r}
+xgb_grid <- grid_latin_hypercube(
+  min_n(),
+  tree_depth(),
+  loss_reduction (),
+  learn_rate(),
+  finalize(mtry(), mcl_train),
+  sample_size = sample_prop(),
+  size = 50
+)
+
+
+
+xgb_grid 
+```
+
+#Finalize workflow with recipe and hyperparameter tuning specifications
+
+```{r}
+xgb_wf <- workflow() %>%
+  add_recipe(mcl_recipe) %>% 
+  add_model(xgb_spec)
+
+xgb_wf
+```
+
+#Make function for getting variable importance from folds
+
+```{r}
+get_xgb_imp <- function(x) {
+  x %>% 
+    extract_fit_parsnip() %>% 
+    vip::vi()
+}
+```
+
+#Set up parallel processing #Tune using the grid of hyperparameters and
+the resampled folds #You may get warnings for new levels created for
+sparse features - the hyperparameter fit will still work.
+
+```{r}
+doParallel::registerDoParallel()
+
+set.seed(122)
+xgb_res <- tune_grid(
+  xgb_wf,
+  resamples = mcl_folds,
+  grid = xgb_grid,
+  control = control_grid(extract=get_xgb_imp,save_pred = TRUE)
+)
+
+xgb_res
+```
+
+#Collect metrics
+
+```{r}
+collect_metrics(xgb_res)
+```
+
+#Visualize hyperparameter metrics for the possible models
+
+```{r}
+xgb_res %>%
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  select(mean, mtry:sample_size) %>%
+  pivot_longer(mtry:sample_size,
+               values_to = "value",
+               names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "AUC")
+```
+
+#Show the best performing set of parameters
+
+```{r}
+best_models <- show_best(xgb_res, "roc_auc")
+best_models
+
+```
+
+#Select best hyperparameters based on AUC
+
+```{r}
+best_auc <- select_best(xgb_res, "roc_auc")
+best_auc
+```
+
+#Look at feature importance in the trained stratified folds.
+
+```{r}
+library(vip)
+library(jcolors)
+
+xgb_res %>% 
+  select(id, .extracts) %>% 
+  unnest(.extracts) %>% 
+  unnest(.extracts) %>% 
+  group_by(Variable) %>% 
+  summarise(Mean=mean(Importance),
+            Variance=sd(Importance)) %>% 
+  slice_max(Mean, n=30) %>% 
+  ggplot(aes(Mean, reorder(Variable, Mean))) +
+  geom_crossbar(aes(xmin=Mean-Variance, xmax=Mean+Variance)) +
+    labs(x="Variable Importance", y=NULL)
+
+
+```
+
+#Finalize workflow with the hyperparameter values
+
+```{r}
+final_xgb <- 
+  finalize_workflow(xgb_wf, best_auc)
+
+final_xgb
+```
+
+##Incorporate the hyperparameter values into the last fit and fit the
+model on the test set.
+
+```{r}
+xgb_last_all <- final_xgb %>% 
+  last_fit(mcl_split) %>% mutate(model="All Feature Types")
+```
+
+#Evaluate model performance.
+
+```{r}
+final_res <- last_fit(final_xgb, mcl_split)
+final_metrics_all <- collect_metrics(final_res)
+final_metrics_all
+```
+
+#Make a confusion matrix showing predictions.
+
+```{r}
+collect_predictions(xgb_last_all) %>% 
+  conf_mat(status, .pred_class) 
+```
+
+#Which variables were most important to the prediction? Make Variable
+Importance Plot (VIP).
+
+```{r}
+library(vip)
+library(jcolors)
+xgb_fit <-extract_fit_parsnip(final_res)
+vip(xgb_fit, geom="col", num_features=20, aesthetics=list(color="grey50", fill="#1b98e0")) + scale_x_discrete(labels=c("ldh"="LDH", "platelets" ="Platelets", "ki_67"="Ki67%", "hgb"="Hgb","bm"= "BM", "b2m"="B2M", "wbc"="WBC","age_dx_years"="Age at dx", "tp53_yes"= "TP53 mutation", "ecog_X1"= "ECOG 1", "total_genes_mutated" = "Number of Somatic Mutations", "morph_classic" ="Classic Morphology", "bmi"= "BMI", "b_symptoms_yes"="B symptoms", "smoke_no"="Never Smoker", "alcohol" = "Alcohol consumption", "card11_yes" = "CARD11 mutation", "gi_involve_yes" = "GI Involvement", "complex_kar_yes" = "Complex Karyotype", "site_ln_multiple" = "Site: Multiple Lymph Nodes"))
+                                                                            
+                                                                          
+```
+
+#Get model agnostic Shapley additive explanations (SHAP) and plot.
+
+```{r}
+library(SHAPforxgboost)
+mcl_shap <-
+  shap.prep(
+    xgb_model = extract_fit_engine(xgb_fit),
+    X_train = bake(mcl_prep,
+    has_role("predictor"),
+    new_data=NULL,
+    composition="matrix"
+    ), top_n=20
+  )
+
+
+```
+
+```{r}
+shap.plot.summary(mcl_shap) + scale_x_discrete(labels=c("ldh"="LDH", "platelets" ="Platelets", "ki_67"="Ki67%", "hgb"="Hgb","bm"= "BM", "b2m"="B2M", "wbc"="WBC","age_dx_years"="Age at dx", "tp53_yes"= "TP53 mutation", "ecog_X1"= "ECOG 1", "total_genes_mutated" = "Number of Somatic mutations", "morph_classic" ="Classic Morphology", "bmi"= "BMI", "b_symptoms_yes"="B symptoms", "smoke_no"="Never Smoker", "alcohol" = "Alcohol consumption", "card11_yes" = "CARD11 mutation", "gi_involve_yes" = "GI Involvement", "complex_kar_yes" = "Complex Karyotype", "site_ln_multiple" = "Site: Multiple Lymph Nodes", "total_germ_variants" = "Number of Germline Mutations"), limits=rev) 
+```
+
+#Plot ROC
+
+```{r}
+final_res %>%
+  collect_predictions() %>%
+  group_by(id) %>% 
+  roc_curve(status, .pred_aggressive) %>%
+  ggplot(aes(x = 1 - specificity, y = sensitivity, color=id)) +
+  geom_line(size = 1.5, color = "#1b98e0") +
+  geom_abline(
+    lty = 2, alpha = 0.5,
+    color = "gray50",
+    size = 1.2
+  )
+```
+
+#Make a dataframe of final predictions for visualization
+
+```{r}
+all_feature_model_predict <- final_res %>%
+  collect_predictions() %>%
+  group_by(id)
+```
