@@ -1,0 +1,92 @@
+---
+title: "Random Forest Compare"
+output: html_notebook
+---
+
+
+```{r}
+library(tidymodels)
+```
+
+
+```{r}
+set.seed(102)
+library(doParallel)
+
+set.seed(102)
+mcl_split <- initial_split(MCL, strata=status)
+mcl_train <- training(mcl_split)
+mcl_test <- testing(mcl_split)
+
+mcl_folds<-vfold_cv(mcl_train, strata=status)
+
+
+```
+
+```{r}
+mcl_recipe<-recipe(status ~.,data=mcl_train) %>% 
+  update_role(pt_id, new_role = "id variable") %>% 
+  step_other(all_nominal_predictors(),threshold = 0.01) %>% 
+  step_impute_bag(all_predictors(), impute_with = imp_vars(all_predictors()),
+  trees = 25, 
+  seed_val = 102) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_nzv(all_predictors()) 
+
+   
+
+
+
+mcl_prep <- prep(mcl_recipe)
+mcl_data_preprocessed <- juice(mcl_prep)
+juice(mcl_prep)
+```
+
+
+```{r}
+rf_spec <- 
+  rand_forest(mtry=tune(), min_n = tune (), trees = 2000) %>% 
+  set_mode("classification") %>% 
+  set_engine("ranger")
+  
+
+rf_spec
+```
+
+```{r}
+rf_workflow <- workflow() %>% 
+  add_recipe(mcl_recipe) %>% 
+  add_model(rf_spec)
+```
+
+
+```{r}
+set.seed(102)
+
+doParallel::registerDoParallel()
+rf_tune <- tune_grid(rf_workflow, 
+                     resamples=mcl_folds,
+                     grid=11)
+```
+```{r}
+show_best(rf_tune, metric="roc_auc")
+```
+
+```{r}
+final_rf <- rf_workflow %>% finalize_workflow(select_best(rf_tune))
+```
+
+```{r}
+mcl_fit <- last_fit(final_rf, mcl_split)
+
+mcl_fit
+```
+```{r}
+collect_metrics(mcl_fit)
+```
+
+```{r}
+collect_predictions(mcl_fit) %>% 
+  conf_mat(status, .pred_class) 
+```
+
